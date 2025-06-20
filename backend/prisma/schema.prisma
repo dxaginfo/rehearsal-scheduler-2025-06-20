@@ -1,0 +1,195 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String               @id @default(uuid())
+  email             String               @unique
+  passwordHash      String
+  firstName         String
+  lastName          String
+  phoneNumber       String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  // Relations
+  createdBands      Band[]               @relation("BandCreator")
+  bandMemberships   BandMember[]         @relation("UserBands")
+  availability      UserAvailability[]   @relation("UserAvailability")
+  createdRehearsals Rehearsal[]          @relation("RehearsalCreator")
+  attendance        RehearsalAttendance[] @relation("UserAttendance")
+  uploadedResources RehearsalResource[]  @relation("ResourceUploader")
+  notifications     Notification[]       @relation("UserNotifications")
+  notificationPrefs UserNotificationPreference[] @relation("UserNotificationPrefs")
+}
+
+model Band {
+  id          String      @id @default(uuid())
+  name        String
+  description String?
+  createdById String
+  createdBy   User        @relation("BandCreator", fields: [createdById], references: [id])
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  members     BandMember[] @relation("BandMembers")
+  rehearsals  Rehearsal[]  @relation("BandRehearsals")
+  songs       Song[]       @relation("BandSongs")
+}
+
+model BandMember {
+  id        String    @id @default(uuid())
+  bandId    String
+  band      Band      @relation("BandMembers", fields: [bandId], references: [id])
+  userId    String
+  user      User      @relation("UserBands", fields: [userId], references: [id])
+  role      Role      @default(MEMBER)
+  joinedAt  DateTime  @default(now())
+  status    Status    @default(ACTIVE)
+
+  @@unique([bandId, userId])
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+model UserAvailability {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation("UserAvailability", fields: [userId], references: [id])
+  dayOfWeek    Int?      // 0-6 for Sunday-Saturday, null if not recurring
+  startTime    DateTime
+  endTime      DateTime
+  recurring    Boolean   @default(false)
+  specificDate DateTime? // Only for non-recurring availability
+}
+
+model Rehearsal {
+  id                String              @id @default(uuid())
+  bandId            String
+  band              Band                @relation("BandRehearsals", fields: [bandId], references: [id])
+  title             String
+  startTime         DateTime
+  endTime           DateTime
+  location          String?
+  description       String?
+  createdById       String
+  createdBy         User                @relation("RehearsalCreator", fields: [createdById], references: [id])
+  recurring         Boolean             @default(false)
+  recurrencePattern Json?               // JSON to store recurrence pattern
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  attendance        RehearsalAttendance[] @relation("RehearsalAttendance")
+  resources         RehearsalResource[]  @relation("RehearsalResources")
+  songs             RehearsalSong[]      @relation("RehearsalSongs")
+}
+
+model RehearsalAttendance {
+  id           String           @id @default(uuid())
+  rehearsalId  String
+  rehearsal    Rehearsal       @relation("RehearsalAttendance", fields: [rehearsalId], references: [id])
+  userId       String
+  user         User            @relation("UserAttendance", fields: [userId], references: [id])
+  status       AttendanceStatus @default(NO_RESPONSE)
+  reason       String?
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([rehearsalId, userId])
+}
+
+enum AttendanceStatus {
+  CONFIRMED
+  DECLINED
+  TENTATIVE
+  NO_RESPONSE
+}
+
+model RehearsalResource {
+  id           String    @id @default(uuid())
+  rehearsalId  String
+  rehearsal    Rehearsal @relation("RehearsalResources", fields: [rehearsalId], references: [id])
+  title        String
+  description  String?
+  fileUrl      String
+  uploadedById String
+  uploadedBy   User      @relation("ResourceUploader", fields: [uploadedById], references: [id])
+  createdAt    DateTime  @default(now())
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation("UserNotifications", fields: [userId], references: [id])
+  type      NotificationType
+  content   String
+  relatedId String?          // Can be any related entity ID
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
+
+enum NotificationType {
+  INVITATION
+  REMINDER
+  ANNOUNCEMENT
+}
+
+model UserNotificationPreference {
+  id            String           @id @default(uuid())
+  userId        String
+  user          User             @relation("UserNotificationPrefs", fields: [userId], references: [id])
+  notificationType NotificationType
+  emailEnabled  Boolean          @default(true)
+  pushEnabled   Boolean          @default(true)
+  smsEnabled    Boolean          @default(false)
+
+  @@unique([userId, notificationType])
+}
+
+model Song {
+  id          String         @id @default(uuid())
+  bandId      String
+  band        Band           @relation("BandSongs", fields: [bandId], references: [id])
+  title       String
+  artist      String?
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  // Relations
+  rehearsals  RehearsalSong[] @relation("SongRehearsals")
+}
+
+model RehearsalSong {
+  id          String       @id @default(uuid())
+  rehearsalId String
+  rehearsal   Rehearsal    @relation("RehearsalSongs", fields: [rehearsalId], references: [id])
+  songId      String
+  song        Song         @relation("SongRehearsals", fields: [songId], references: [id])
+  order       Int
+  status      SongStatus   @default(PLANNED)
+
+  @@unique([rehearsalId, songId])
+}
+
+enum SongStatus {
+  PLANNED
+  PRACTICED
+  SKIPPED
+}
